@@ -1387,6 +1387,24 @@ typedef struct {
 } channel_scan_request_t;
 
 typedef struct {
+    bssid_t    bssid;
+    unsigned char assoc_control;
+    unsigned short validity_period;
+    unsigned char count;
+    mac_address_t sta_mac;
+} client_assoc_ctrl_req_t;
+
+// Disassociation parameters sent from em_agent to OneWifi via bus
+// Must match em_disassoc_params_t in em_base.h
+typedef struct {
+    mac_address_t   sta_mac;
+    bssid_t         bssid;
+    unsigned int    disassoc_time;
+    unsigned int    reason;
+    bool            silent;
+} disassoc_params_t;
+
+typedef struct {
     bssid_t bssid;
     ssid_t ssid;
     CHAR signal_strength;

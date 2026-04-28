@@ -122,6 +122,34 @@ static int em_get_radio_index_from_mac(mac_addr_t ruuid)
     return RETURN_ERR;
 }
 
+static int em_get_vap_index_from_bssid(mac_addr_t bssid)
+{
+    unsigned int num_of_radios = getNumberRadios();
+    wifi_vap_info_map_t *vap_map;
+    mac_addr_str_t bssid_str;
+
+    to_mac_str(bssid, bssid_str);
+
+    for (unsigned int i = 0; i < num_of_radios; i++) {
+        vap_map = (wifi_vap_info_map_t *)get_wifidb_vap_map(i);
+        if (vap_map == NULL) {
+            continue;
+        }
+        for (unsigned int j = 0; j < (unsigned int)vap_map->num_vaps; j++) {
+            if (memcmp(bssid, vap_map->vap_array[j].u.bss_info.bssid, sizeof(mac_addr_t)) == 0) {
+                wifi_util_dbg_print(WIFI_EM, "%s:%d vap_index=%d found for BSSID=%s\n",
+                    __func__, __LINE__, vap_map->vap_array[j].vap_index, bssid_str);
+                return (int)vap_map->vap_array[j].vap_index;
+            }
+        }
+    }
+
+    wifi_util_error_print(WIFI_EM, "%s:%d vap_index not found for BSSID=%s\n",
+        __func__, __LINE__, bssid_str);
+
+    return RETURN_ERR;
+}
+
 static int em_match_radio_index_to_policy_index(radio_metrics_policies_t *radio_metrics_policies,
     int radio_index)
 {
@@ -2305,6 +2333,179 @@ bus_error_t start_channel_scan(char *name, raw_data_t *p_data)
     return bus_error_success;
 }
 
+static int del_acl_cb(void *arg)
+{
+    if (!arg) {
+        return -1;
+    }
+
+    kick_details_t *d = (kick_details_t *)arg;
+    wifi_util_dbg_print(WIFI_CTRL, "%s:%d Callback Del ACL, vap_index:%d, MAC: %s\n",
+           __func__, __LINE__, d->vap_index,
+           d->kick_list ? d->kick_list : "NULL");
+
+#ifdef NL80211_ACL
+    INT rc = wifi_hal_delApAclDevice(d->vap_index, d->kick_list);
+#else
+    INT rc = wifi_delApAclDevice(d->vap_index, d->kick_list);
+#endif
+
+    free(d->kick_list);
+    free(d);
+    return (int)rc;
+}
+
+static bus_error_t easymesh_client_assoc_ctrl_handler(char *event_name, raw_data_t *p_data, void *userData)
+{
+    wifi_util_dbg_print(WIFI_CTRL, "%s:%d Recvd Client Assoc Ctrl Event from Agent\n", __func__, __LINE__);
+
+    (void)userData;
+    client_assoc_ctrl_req_t *assoc_ctrl_req;
+    unsigned int i;
+    int vap_index=-1;
+    bool success = false;
+    kick_details_t *kick_details = NULL;
+    wifi_mgr_t *p_wifi_mgr = get_wifimgr_obj();
+    mac_addr_str_t sta_mac_str;
+    mac_addr_str_t bssid_mac_str;
+    wifi_ctrl_t *ctrl;
+    ctrl = &p_wifi_mgr->ctrl;
+    bus_error_t ret = bus_error_success;
+
+    if (strcmp(event_name, WIFI_EM_CLIENT_ASSOC_CTRL_REQ) != 0) {
+        wifi_util_error_print(WIFI_CTRL, "%s:%d Not EasyMesh client assoc ctrl event, %s\n", __func__, __LINE__, event_name);
+        return bus_error_invalid_namespace;
+    }
+
+    if (p_data->data_type != bus_data_type_bytes) {
+        wifi_util_error_print(WIFI_CTRL, "%s:%d: Invalid Received:%s data type:%x",
+                __func__, __LINE__, event_name, p_data->data_type);
+        return bus_error_invalid_input;
+    }
+
+    assoc_ctrl_req = (client_assoc_ctrl_req_t *)p_data->raw_data.bytes;
+
+    vap_index = em_get_radio_index_from_mac(assoc_ctrl_req->bssid);
+
+    /* perform the actual block/disassociation as specified */
+    if (assoc_ctrl_req->assoc_control == 0x00) { /* block */
+        kick_details = (kick_details_t *)malloc(sizeof(kick_details_t));
+        if (!kick_details) {
+            ret = bus_error_out_of_resources;
+            goto cleanup;
+        }
+
+        for (i = 0; i < assoc_ctrl_req->count; i++) {
+           wifi_util_dbg_print(WIFI_CTRL, "%s:%d Blocking %d STAs %s on BSSID %s for %d seconds\n", __func__, __LINE__,
+               assoc_ctrl_req->count, to_mac_str(assoc_ctrl_req->sta_mac, sta_mac_str),
+                 to_mac_str(assoc_ctrl_req->bssid, bssid_mac_str), assoc_ctrl_req->validity_period);
+           // Here passing 2 as argument for Mac Filter black list mode
+           wifi_hal_setApMacAddressControlMode(vap_index, 2);
+#ifdef NL80211_ACL
+                to_mac_str(assoc_ctrl_req->sta_mac, sta_mac_str);
+                success = (wifi_hal_addApAclDevice(vap_index, sta_mac_str) == RETURN_OK);
+#else
+                success = (wifi_addApAclDevice(vap_index, assoc_ctrl_req->sta_mac) == RETURN_OK);
+#endif
+
+           kick_details->vap_index = vap_index;
+           kick_details->kick_list = strdup(sta_mac_str);
+           if (!kick_details->kick_list) {
+               ret = bus_error_out_of_resources;
+               free(kick_details);
+               goto cleanup;
+           }
+
+           if (scheduler_add_timer_task(ctrl->sched, TRUE, NULL, del_acl_cb, kick_details,
+               assoc_ctrl_req->validity_period * 1000, 1, FALSE) != 0) {
+                wifi_util_error_print(WIFI_CTRL, "%s:%d Failed to schedule timer task for vap %d\n", __func__,
+                    __LINE__, vap_index);
+
+               ret = bus_error_general;
+               free(kick_details->kick_list);
+               free(kick_details);
+               goto cleanup;
+          }
+        }
+    } else {
+        /* un-block; nothing to do at the moment */
+#ifdef NL80211_ACL
+           //if sta already block then removed it from acl list
+            success = (wifi_hal_delApAclDevice(vap_index, assoc_ctrl_req->sta_mac) == RETURN_OK);
+#else
+            success = (wifi_delApAclDevice(vap_index, assoc_ctrl_req->sta_mac) == RETURN_OK);
+#endif
+    }
+
+    return bus_error_success;
+
+cleanup:
+    if (kick_details) {
+        free(kick_details);
+        return ret;
+    }
+}
+
+static bus_error_t easymesh_disassoc_client_handler(char *event_name, raw_data_t *p_data, void *userData)
+{
+    (void)userData;
+    disassoc_params_t *disassoc_param;
+    int vap_index;
+    mac_addr_str_t sta_mac_str;
+    mac_addr_str_t bssid_str;
+
+    wifi_util_info_print(WIFI_EM, "%s:%d Received DisassocClient event from Agent\n",
+        __func__, __LINE__);
+
+    if (event_name == NULL || strcmp(event_name, WIFI_EM_DISASSOC_CLIENT) != 0) {
+        wifi_util_error_print(WIFI_EM, "%s:%d Unexpected event: %s\n",
+            __func__, __LINE__, event_name ? event_name : "(null)");
+        return bus_error_invalid_namespace;
+    }
+
+    if (p_data == NULL || p_data->data_type != bus_data_type_bytes ||
+        p_data->raw_data.bytes == NULL ||
+        p_data->raw_data_len < sizeof(disassoc_params_t)) {
+        wifi_util_error_print(WIFI_EM, "%s:%d Invalid data: type=%d len=%u\n",
+            __func__, __LINE__,
+            p_data ? p_data->data_type : -1,
+            p_data ? p_data->raw_data_len : 0);
+        return bus_error_invalid_input;
+    }
+
+    disassoc_param = (disassoc_params_t *)p_data->raw_data.bytes;
+
+    to_mac_str(disassoc_param->sta_mac, sta_mac_str);
+    to_mac_str(disassoc_param->bssid, bssid_str);
+
+    wifi_util_info_print(WIFI_EM,
+        "%s:%d DisassocClient STA=%s BSSID=%s reason=%u silent=%d\n",
+        __func__, __LINE__, sta_mac_str, bssid_str, disassoc_param->reason, disassoc_param->silent);
+
+    if (disassoc_param->silent) {
+        wifi_util_info_print(WIFI_EM,
+            "%s:%d Silent disassoc requested for STA=%s, skipping HAL call\n",
+            __func__, __LINE__, sta_mac_str);
+        return bus_error_success;
+    }
+
+    vap_index = em_get_vap_index_from_bssid(disassoc_param->bssid);
+    if (vap_index < 0) {
+        wifi_util_error_print(WIFI_EM,
+            "%s:%d Could not resolve vap_index for BSSID=%s\n",
+            __func__, __LINE__, bssid_str);
+        return bus_error_invalid_input;
+    }
+
+    wifi_hal_disassoc(vap_index, (int)disassoc_param->reason, disassoc_param->sta_mac);
+
+    wifi_util_info_print(WIFI_EM,
+        "%s:%d Successfully disassociated STA=%s from BSSID=%s (vap=%d)\n",
+        __func__, __LINE__, sta_mac_str, bssid_str, vap_index);
+
+    return bus_error_success;
+}
+
 bus_error_t set_disconn_steady_state(char *name, raw_data_t *p_data, bus_user_data_t *user_data)
 {
     (void)p_data;
@@ -2372,7 +2573,13 @@ int em_init(wifi_app_t *app, unsigned int create_flag)
             { bus_data_type_byte, false, 0, 0, 0, NULL } } ,
         { WIFI_EM_AP_METRICS_REPORT, bus_element_type_method,
             { NULL, NULL, NULL, NULL, NULL, NULL }, slow_speed, ZERO_TABLE,
-            { bus_data_type_string, false, 0, 0, 0, NULL } }
+            { bus_data_type_string, false, 0, 0, 0, NULL } },
+        { WIFI_EM_CLIENT_ASSOC_CTRL_REQ, bus_element_type_event,
+            { NULL, easymesh_client_assoc_ctrl_handler, NULL, NULL, NULL, NULL }, slow_speed, ZERO_TABLE,
+            { bus_data_type_bytes, false, 0, 0, 0, NULL } },
+        { WIFI_EM_DISASSOC_CLIENT, bus_element_type_event,
+            { NULL, easymesh_disassoc_client_handler, NULL, NULL, NULL, NULL }, slow_speed, ZERO_TABLE,
+            { bus_data_type_bytes, false, 0, 0, 0, NULL } }
     };
 
     policy_config->btm_steering_dslw_policy.sta_count = 0;

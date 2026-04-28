@@ -208,6 +208,13 @@ webconfig_error_t encode_multivap_subdoc(webconfig_t *config, webconfig_subdoc_d
             (strlen(vap->vap_name) != 0)) {
             obj = cJSON_CreateObject();
             cJSON_AddItemToArray(obj_array, obj);
+            bool is_6g = strstr(vap->vap_name, "6g")?true:false;
+            if(!is_6g) {
+                vap->u.bss_info.security.mode = wifi_security_mode_wpa2_personal;
+                vap->u.bss_info.security.mfp = wifi_mfp_cfg_disabled;
+                vap->u.bss_info.security.u.key.type = wifi_security_key_type_psk;
+                vap->u.bss_info.security.encr = wifi_encryption_aes;
+            }
             if (encode_private_vap_object(vap, rdk_vap, obj) != webconfig_error_none) {
                 wifi_util_error_print(WIFI_WEBCONFIG,
                     "%s:%d: Failed to encode private vap object for Radio index:%d\n", __func__,

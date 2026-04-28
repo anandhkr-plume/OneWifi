@@ -498,10 +498,10 @@ static int init_vap_config_default(int vap_index, wifi_vap_info_t *config,
 #endif /* CONFIG_IEEE80211BE */
             } else {
 #if defined(_PLATFORM_BANANAPI_R4_)
-                cfg.u.bss_info.security.mode = wifi_security_mode_wpa3_personal;
+                cfg.u.bss_info.security.mode = wifi_security_mode_wpa2_personal;
                 cfg.u.bss_info.security.wpa3_transition_disable = false;
-                cfg.u.bss_info.security.mfp = wifi_mfp_cfg_required;
-                cfg.u.bss_info.security.u.key.type = wifi_security_key_type_sae;
+                cfg.u.bss_info.security.mfp = wifi_mfp_cfg_optional;
+                cfg.u.bss_info.security.u.key.type = wifi_security_key_type_psk;
 #ifdef CONFIG_IEEE80211BE
                 cfg.u.bss_info.security.encr = wifi_encryption_aes_gcmp256;
 #else
@@ -511,6 +511,7 @@ static int init_vap_config_default(int vap_index, wifi_vap_info_t *config,
                 cfg.u.bss_info.security.mode = wifi_security_mode_wpa2_personal;
                 cfg.u.bss_info.security.encr = wifi_encryption_aes;
 #endif // _PLATFORM_BANANAPI_R4_
+                cfg.u.bss_info.security.encr = wifi_encryption_aes;
             }
             cfg.u.bss_info.bssHotspot = false;
         } else  {

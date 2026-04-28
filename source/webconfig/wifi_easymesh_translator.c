@@ -78,6 +78,7 @@ unsigned int translate_auth_type_from_easymesh(unsigned int authtype)
             return wifi_security_mode_wpa_personal;
 
         case EM_AUTH_WPA2PSK:
+        case EM_AUTH_WPA2:
             return wifi_security_mode_wpa2_personal;
 
         case EM_AUTH_WPA:
@@ -2451,6 +2452,15 @@ webconfig_error_t translate_from_easymesh_bssinfo_to_vap_per_radio(webconfig_sub
                             __func__, __LINE__, vap->vap_mode);
                     }
                 }
+            }
+        }
+        if(vap->vap_mode == wifi_vap_mode_ap) {
+            bool is_6g = strstr(vap->vap_name, "6g")?true:false;
+            if(!is_6g) {
+                vap->u.bss_info.security.mode = wifi_security_mode_wpa2_personal;
+                vap->u.bss_info.security.mfp = wifi_mfp_cfg_disabled;
+                vap->u.bss_info.security.u.key.type = wifi_security_key_type_psk;
+                vap->u.bss_info.security.encr = wifi_encryption_aes;
             }
         }
 

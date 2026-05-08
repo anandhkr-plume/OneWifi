@@ -1189,9 +1189,11 @@ webconfig_error_t translate_ap_metrics_report_to_easy_mesh_bss_info(webconfig_su
     em_ap_report = &decoded_params->em_ap_metrics_report;
 
     for (unsigned int i = 0; i < em_ap_report->radio_count; i++) {
+        static const bssid_t zero_bssid = {0};
         radio_index = decoded_params->em_ap_metrics_report.radio_reports[i].radio_index;
-        radio = &decoded_params->radios[radio_index];
+        /*radio = &decoded_params->radios[radio_index];
         vap_map = &radio->vaps.vap_map;
+        wifi_util_info_print(WIFI_WEBCONFIG,"%s:%d: radio_index %d \n", __func__, __LINE__, radio_index);
 
         for (j = 0; j < radio->vaps.num_vaps; j++) {
             //Get the corresponding vap
@@ -1205,8 +1207,19 @@ webconfig_error_t translate_ap_metrics_report_to_easy_mesh_bss_info(webconfig_su
             if (em_bss_info == NULL) {
                 wifi_util_error_print(WIFI_WEBCONFIG,"%s:%d: Cannot find bss info for index %d\n", __func__, __LINE__, vap->vap_index);
                 continue;
+            }*/
+        for (j = 0; j < MAX_NUM_VAP_PER_RADIO; j++) {
+            ap_metrics = &em_ap_report->radio_reports[i].vap_reports[j];
+            if (memcmp(ap_metrics->vap_metrics.bssid, zero_bssid, sizeof(bssid_t)) == 0) {
+                continue;
+            }
+            em_bss_info = (em_bss_info_t *)(proto->get_bss_info_with_mac(proto->data_model, ap_metrics->vap_metrics.bssid));
+            if (em_bss_info == NULL) {
+                wifi_util_error_print(WIFI_WEBCONFIG, "%s:%d: Cannot find bss info for BSSID\n", __func__, __LINE__);
+                continue;
             }
             em_bss_info->numberofsta = ap_metrics->sta_cnt;
+            wifi_util_error_print(WIFI_WEBCONFIG, "%s:%d Number of associated STAs: %d\n", __func__, __LINE__, em_bss_info->numberofsta);
 
             per_sta_metrics_t *sta_stats = NULL;
             for (unsigned int count = 0; count < em_bss_info->numberofsta; count++) {

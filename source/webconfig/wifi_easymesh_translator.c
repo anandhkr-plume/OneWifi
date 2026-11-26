@@ -2488,17 +2488,7 @@ webconfig_error_t translate_vap_object_to_easymesh_for_dml(webconfig_subdoc_data
                 }
 #ifdef UWM_CTRL_WPS_SUPPORT
             } else if (is_vap_onboarding(wifi_prop, vap->vap_index) == TRUE) {
-                /*
-                 * Dedicated onboarding: dedicated EasyMesh onboarding VAPs (AP.5/AP.6)
-                 * live outside the EasyMesh fronthaul/backhaul. They appear
-                 * in this VAP iteration because OneWifi exposes them in the
-                 * dml subdoc (so the controller can see onboarding state),
-                 * but they don't map to any em_bss_info row. Skip so the
-                 * dispatch ladder doesn't abort with "Unknown vap type 14"
-                 * and break webconfig_easymesh_decode -> agent dml publish
-                 * path. Without this skip, 5G/6G non-MLO VAPs never get
-                 * the M2-pushed SSID propagated through the agent.
-                 */
+                // Onboarding VAPs (AP.5/AP.6) have no em_bss_info row, skip them
                 wifi_util_dbg_print(WIFI_WEBCONFIG,"%s:%d: Dedicated onboarding: skipping onboarding VAP %s (idx %d) in vap->EM translate\n",
                     __func__, __LINE__, vap->vap_name, vap->vap_index);
                 continue;
@@ -2632,17 +2622,7 @@ webconfig_error_t translate_vap_object_to_easymesh_bss_info(webconfig_subdoc_dat
                 }
 #ifdef UWM_CTRL_WPS_SUPPORT
             } else if (is_vap_onboarding(wifi_prop, vap->vap_index) == TRUE) {
-                /*
-                 * Dedicated onboarding: dedicated EasyMesh onboarding VAPs (AP.5/AP.6)
-                 * live outside the EasyMesh fronthaul/backhaul. They appear
-                 * in this VAP iteration because OneWifi exposes them in the
-                 * dml subdoc (so the controller can see onboarding state),
-                 * but they don't map to any em_bss_info row. Skip so the
-                 * dispatch ladder doesn't abort with "Unknown vap type 14"
-                 * and break webconfig_easymesh_decode -> agent dml publish
-                 * path. Without this skip, 5G/6G non-MLO VAPs never get
-                 * the M2-pushed SSID propagated through the agent.
-                 */
+                // Onboarding VAPs (AP.5/AP.6) have no em_bss_info row, skip them
                 wifi_util_dbg_print(WIFI_WEBCONFIG,"%s:%d: Dedicated onboarding: skipping onboarding VAP %s (idx %d) in vap->EM translate\n",
                     __func__, __LINE__, vap->vap_name, vap->vap_index);
                 continue;
@@ -2784,17 +2764,7 @@ webconfig_error_t translate_per_radio_vap_object_to_easymesh_bss_info(webconfig_
                 }
 #ifdef UWM_CTRL_WPS_SUPPORT
             } else if (is_vap_onboarding(wifi_prop, vap->vap_index) == TRUE) {
-                /*
-                 * Dedicated onboarding: dedicated EasyMesh onboarding VAPs (AP.5/AP.6)
-                 * live outside the EasyMesh fronthaul/backhaul. They appear
-                 * in this VAP iteration because OneWifi exposes them in the
-                 * dml subdoc (so the controller can see onboarding state),
-                 * but they don't map to any em_bss_info row. Skip so the
-                 * dispatch ladder doesn't abort with "Unknown vap type 14"
-                 * and break webconfig_easymesh_decode -> agent dml publish
-                 * path. Without this skip, 5G/6G non-MLO VAPs never get
-                 * the M2-pushed SSID propagated through the agent.
-                 */
+                // Onboarding VAPs (AP.5/AP.6) have no em_bss_info row, skip them
                 wifi_util_dbg_print(WIFI_WEBCONFIG,"%s:%d: Dedicated onboarding: skipping onboarding VAP %s (idx %d) in vap->EM translate\n",
                     __func__, __LINE__, vap->vap_name, vap->vap_index);
                 continue;
@@ -3240,15 +3210,7 @@ webconfig_error_t translate_from_easymesh_bssinfo_to_vap_per_radio(webconfig_sub
             }
 #ifdef UWM_CTRL_WPS_SUPPORT
         } else if (is_vap_onboarding(wifi_prop, vap->vap_index) == TRUE) {
-            /*
-             * Dedicated onboarding: onboarding VAPs (AP.5/AP.6) live outside the
-             * EasyMesh fronthaul/backhaul. The controller never pushes
-             * credentials for them; rdk-wps-monitor flips Enable / WPS
-             * via TR-181 and the AccessPoint webconfig pass owns the
-             * actual program. Skip them so this per-radio EM->vap
-             * translator no longer aborts once vapIndex 4 / 5 are
-             * onboarding_2g / onboarding_5g.
-             */
+            // Controller never pushes credentials for onboarding VAPs (AP.5/AP.6), skip them
             wifi_util_dbg_print(WIFI_WEBCONFIG,"%s:%d: Dedicated onboarding: skipping onboarding VAP %s (idx %d) in EM translate\n",
                 __func__, __LINE__, vap->vap_name, vap->vap_index);
             continue;
@@ -3495,15 +3457,7 @@ webconfig_error_t translate_from_easymesh_bssinfo_to_vap_object(webconfig_subdoc
                 }
 #ifdef UWM_CTRL_WPS_SUPPORT
             } else if (is_vap_onboarding(wifi_prop, vap->vap_index) == TRUE) {
-                /*
-                 * Dedicated onboarding: onboarding VAPs (AP.5/AP.6) live outside the
-                 * EasyMesh fronthaul/backhaul. The controller never pushes
-                 * credentials for them; rdk-wps-monitor flips Enable / WPS
-                 * via TR-181 and the AccessPoint webconfig pass owns the
-                 * actual program. Skip them so this aggregate EM->vap
-                 * translator no longer aborts once vapIndex 4 / 5 are
-                 * onboarding_2g / onboarding_5g.
-                 */
+                // Controller never pushes credentials for onboarding VAPs (AP.5/AP.6), skip them
                 wifi_util_dbg_print(WIFI_WEBCONFIG,"%s:%d: Dedicated onboarding: skipping onboarding VAP %s (idx %d) in EM translate\n",
                     __func__, __LINE__, vap->vap_name, vap->vap_index);
                 continue;
@@ -3778,15 +3732,7 @@ webconfig_error_t   translate_vap_object_from_easymesh_to_dml(webconfig_subdoc_d
                 }
 #ifdef UWM_CTRL_WPS_SUPPORT
             } else if (is_vap_onboarding(wifi_prop, vap->vap_index) == TRUE) {
-                /*
-                 * Dedicated onboarding: dedicated EasyMesh onboarding VAPs (AP.5/AP.6)
-                 * live outside the EasyMesh fronthaul/backhaul. The controller
-                 * never pushes credentials for them; they're owned by the
-                 * local rdk-wps-monitor + AccessPoint webconfig pass. Skip
-                 * here so the EM->vap dispatcher doesn't abort with
-                 * "Unknown vap type 14" once vapIndex 4/5 are
-                 * onboarding_2g/onboarding_5g.
-                 */
+                // Controller never pushes credentials for onboarding VAPs (AP.5/AP.6), skip them
                 wifi_util_dbg_print(WIFI_WEBCONFIG,"%s:%d: Dedicated onboarding: skipping onboarding VAP %s (idx %d) in EM->vap translate\n",
                     __func__, __LINE__, vap->vap_name, vap->vap_index);
                 continue;

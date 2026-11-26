@@ -490,6 +490,11 @@ wifi_vap_info_t *get_mlo_partner_link_by_link_id(wifi_vap_info_t *vapInfo, UINT 
 wifi_mld_common_info_t *get_mld_from_vap_info(wifi_vap_info_t *vap);
 void update_apmld_map(apmld_map_t *apmld_map);
 
+#ifdef UWM_EXT_WPS_SUPPORT
+//WPS STA event callback - called when WPS credentials are received for station interface
+void wps_sta_event_callback(unsigned int vap_index, unsigned int event);
+#endif
+
 #ifdef __cplusplus
 }
 #endif

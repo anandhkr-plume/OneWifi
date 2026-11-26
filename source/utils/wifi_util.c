@@ -41,7 +41,6 @@
 #include <fcntl.h>
 #include <sys/stat.h>
 #include <errno.h>
-#include <unistd.h>
 
 #define  ARRAY_SZ(x)    (sizeof(x) / sizeof((x)[0]))
 /* enable PID in debug logs */
@@ -5091,4 +5090,31 @@ int get_mesh_sta_mac_address_for_radio(wifi_platform_property_t *wifi_prop, unsi
    dev->cli_LastDataDownlinkRate = assoc_dev->cli_LastDataDownlinkRate;  
    dev->cli_LastDataUplinkRate = assoc_dev->cli_LastDataUplinkRate;  
    dev->cli_sleepTime = assoc_dev->cli_sleepTime;
- }
+ } 
+
+#ifdef UWM_CTRL_WPS_SUPPORT
+BOOL is_vap_onboarding(wifi_platform_property_t *wifi_prop, unsigned int ap_index)
+{
+    wifi_interface_name_idex_map_t *vap_prop;
+    unsigned int radio;
+    unsigned int interface;
+    unsigned int total_interfaces = 0;
+
+    for (radio = 0; radio < wifi_prop->numRadios; radio++) {
+        total_interfaces += wifi_prop->radiocap[radio].maxNumberVAPs;
+    }
+    for (interface = 0; interface < total_interfaces; interface++) {
+        vap_prop = &wifi_prop->interface_map[interface];
+        if (vap_prop->index == ap_index) {
+            return strncmp((char *)&vap_prop->vap_name[0], VAP_PREFIX_ONBOARDING, strlen(VAP_PREFIX_ONBOARDING)) == 0 ? TRUE : FALSE;
+        }
+    }
+
+    return FALSE;
+}
+
+int get_list_of_onboarding_ssid(wifi_platform_property_t *wifi_prop, int list_size, wifi_vap_name_t vap_names[])
+{
+    return get_list_of_vap_names(wifi_prop, vap_names, list_size, 1, VAP_PREFIX_ONBOARDING);
+}
+#endif /* UWM_CTRL_WPS_SUPPORT */

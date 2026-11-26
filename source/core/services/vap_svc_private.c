@@ -21,24 +21,14 @@
 #include <stdbool.h>
 #include "stdlib.h"
 #include <sys/time.h>
-#include <string.h>
-#include <unistd.h>
 #include "vap_svc.h"
 #include "wifi_ctrl.h"
 #include "wifi_util.h"
-#include "wifi_hal.h"
 
 bool vap_svc_is_private(unsigned int vap_index)
 {
 #ifdef UWM_CTRL_WPS_SUPPORT
-    /*
-     * Dedicated onboarding: dedicated EasyMesh onboarding VAPs (vap_name prefix
-     * "onboarding_") share the private-VAP service so they go through
-     * vap_svc_private_update -> wifi_hal_createVAP when rdk-wps-monitor
-     * flips Device.WiFi.AccessPoint.{5,6}.Enable. Without this, the
-     * onboarding APs would have no service owner and the AccessPoint
-     * webconfig pass would skip them silently.
-     */
+    //Dedicated WPS Onboarding VAPs share the private-VAP service
     if (isVapPrivate(vap_index) || isVapXhs(vap_index) || isVapLnf(vap_index) ||
         is_vap_onboarding(get_wifi_hal_cap_prop(), vap_index)) {
 #else
@@ -102,7 +92,7 @@ static int configure_lnf_psk_radius_from_hotspot(wifi_vap_info_t *vap_info)
 }
 
 #ifdef UWM_CTRL_WPS_SUPPORT
-static wifi_vap_info_t *get_vap_for_radio(wifi_platform_property_t *wifi_prop,
+static wifi_vap_info_t *get_vap_info_from_name_and_radio(wifi_platform_property_t *wifi_prop,
     wifi_vap_name_t vap_names[], unsigned int num_vaps, unsigned int radio_index)
 {
     unsigned int i;
@@ -110,16 +100,15 @@ static wifi_vap_info_t *get_vap_for_radio(wifi_platform_property_t *wifi_prop,
     for (i = 0; i < num_vaps; i++) {
         int vap_index = convert_vap_name_to_index(wifi_prop, vap_names[i]);
 
-        if (vap_index >= 0 &&
-            get_radio_index_for_vap_index(wifi_prop, vap_index) == (int)radio_index) {
+        if (vap_index >= 0 && get_radio_index_for_vap_index(wifi_prop, vap_index) == (int)radio_index) {
             return get_wifidb_vap_parameters(vap_index);
         }
     }
 
     return NULL;
 }
-
 #endif /* UWM_CTRL_WPS_SUPPORT */
+
 int vap_svc_private_update(vap_svc_t *svc, unsigned int radio_index, wifi_vap_info_map_t *map,
     rdk_wifi_vap_info_t *rdk_vap_info)
 {
@@ -156,12 +145,11 @@ int vap_svc_private_update(vap_svc_t *svc, unsigned int radio_index, wifi_vap_in
             int band;
 
             convert_radio_index_to_freq_band(wifi_prop, radio_index, &band);
-            snprintf((char *)onboarding_vap->u.bss_info.ssid,
-                sizeof(onboarding_vap->u.bss_info.ssid), "%s",
-                (band == WIFI_FREQUENCY_2_4_BAND) ?
-                    "onboarding_2G" : "onboarding_5G");
-            wifi_fill_onboarding_psk((char *)onboarding_vap->u.bss_info.security.u.key.key,
-                sizeof(onboarding_vap->u.bss_info.security.u.key.key));
+            snprintf((char *)onboarding_vap->u.bss_info.ssid, sizeof(onboarding_vap->u.bss_info.ssid), "%s",
+                    (band == WIFI_FREQUENCY_2_4_BAND) ? "onboarding_2G" : "onboarding_5G");
+            //Hardcoding Security Configs because, WPS Onboarding VAPS should always be WPA2-Personal and MLD disabled
+            strncpy((char *)onboarding_vap->u.bss_info.security.u.key.key, WPS_ONBOARDING_PASSKEY,
+                sizeof(onboarding_vap->u.bss_info.security.u.key.key) - 1);
             onboarding_vap->u.bss_info.security.mode = wifi_security_mode_wpa2_personal;
             onboarding_vap->u.bss_info.security.encr = wifi_encryption_aes;
             onboarding_vap->u.bss_info.security.mfp = wifi_mfp_cfg_optional;
@@ -175,44 +163,9 @@ int vap_svc_private_update(vap_svc_t *svc, unsigned int radio_index, wifi_vap_in
             memset(onboarding_vap->u.bss_info.mld_info.common_info.mld_addr, 0,
                 sizeof(onboarding_vap->u.bss_info.mld_info.common_info.mld_addr));
         } else {
-            /*
-             * Only the onboarding BSS may run a registrar. An enrollee that sees a
-             * second active PBC registrar with a different UUID reports a PBC
-             * session overlap and aborts, so keep WPS off everywhere else.
-             */
             p_tgt_vap_map->vap_array[0].u.bss_info.wps.enable = false;
             p_tgt_vap_map->vap_array[0].u.bss_info.wpsPushButton = false;
         }
-#else
-#if defined(_PLATFORM_BANANAPI_R4_) && defined(EM_WPS_FH_HACK)
-        {
-            int band;
-            wifi_vap_info_t *vap = &p_tgt_vap_map->vap_array[0];
-            unsigned int vap_index = map->vap_array[i].vap_index;
-
-            if (convert_radio_index_to_freq_band(wifi_prop, radio_index, &band) == RETURN_OK) {
-                /*
-                 * Private SSID on 2.4/5 GHz with WPS: disable MLO/MLD and use WPA2-Personal + PSK.
-                 * MLD left enabled while forcing WPA2 breaks hostapd / EasyMesh topology; WPS also
-                 * expects classic WPA2-PSK on these bands.
-                 */
-                if (isVapPrivate(vap_index) && map->vap_array[i].u.bss_info.wps.enable &&
-                    band != WIFI_FREQUENCY_6_BAND) {
-                    vap->u.bss_info.mld_info.common_info.mld_enable = 0;
-                    vap->u.bss_info.mld_info.common_info.mld_id = 255;
-                    vap->u.bss_info.mld_info.common_info.mld_link_id = 255;
-                    memset(vap->u.bss_info.mld_info.common_info.mld_addr, 0,
-                        sizeof(vap->u.bss_info.mld_info.common_info.mld_addr));
-
-                    vap->u.bss_info.security.mode = wifi_security_mode_wpa2_personal;
-                    vap->u.bss_info.security.encr = wifi_encryption_aes;
-                    vap->u.bss_info.security.mfp = wifi_mfp_cfg_optional;
-                    vap->u.bss_info.security.wpa3_transition_disable = false;
-                    vap->u.bss_info.security.u.key.type = wifi_security_key_type_psk;
-                }
-            }
-        }
-#endif
 #endif /* UWM_CTRL_WPS_SUPPORT */
 
 #if defined(_WNXL11BWL_PRODUCT_REQ_)
@@ -237,36 +190,31 @@ int vap_svc_private_update(vap_svc_t *svc, unsigned int radio_index, wifi_vap_in
 
 #ifdef UWM_CTRL_WPS_SUPPORT
         // The onboarding registrar carries credentials for the real mesh backhaul BSS.
-        if (map->vap_array[i].u.bss_info.wps.enable &&
-            is_vap_onboarding(wifi_prop, map->vap_array[i].vap_index)) {
+        if (map->vap_array[i].u.bss_info.wps.enable && is_vap_onboarding(wifi_prop, map->vap_array[i].vap_index)) {
             wifi_vap_name_t vap_names[MAX_NUM_RADIOS] = {0};
             unsigned int num_vaps = get_list_of_mesh_backhaul(wifi_prop, MAX_NUM_RADIOS, vap_names);
-            wifi_vap_info_t *backhaul_vap_info = get_vap_for_radio(wifi_prop, vap_names,
-                num_vaps, radio_index);
-
+            wifi_vap_info_t *backhaul_vap_info = get_vap_info_from_name_and_radio(wifi_prop, vap_names, num_vaps, radio_index);
 #else
-        // If WPS is enabled on private VAP, copy mesh backhaul credentials into multi_ap_backhaul structure
-        if (map->vap_array[i].u.bss_info.wps.enable && isVapPrivate(map->vap_array[i].vap_index)) {
-            wifi_platform_property_t *wifi_prop = get_wifi_hal_cap_prop();
-            wifi_vap_name_t vap_names[MAX_NUM_RADIOS] = {0};
-            unsigned int num_vaps = get_list_of_mesh_backhaul(wifi_prop, MAX_NUM_RADIOS, vap_names);
-            wifi_vap_info_t *backhaul_vap_info = NULL;
-
-            if (num_vaps > 0) {
-                int backhaul_vap_index = convert_vap_name_to_index(wifi_prop, vap_names[0]);
-                if (backhaul_vap_index >= 0) {
-                    backhaul_vap_info = get_wifidb_vap_parameters(backhaul_vap_index);
+            // If WPS is enabled on private VAP, copy mesh backhaul credentials into multi_ap_backhaul structure
+            if (map->vap_array[i].u.bss_info.wps.enable && isVapPrivate(map->vap_array[i].vap_index)) {
+                wifi_platform_property_t *wifi_prop = get_wifi_hal_cap_prop();
+                wifi_vap_name_t vap_names[MAX_NUM_RADIOS] = {0};
+                unsigned int num_vaps = get_list_of_mesh_backhaul(wifi_prop, MAX_NUM_RADIOS, vap_names);
+                wifi_vap_info_t *backhaul_vap_info = NULL;
+    
+                if (num_vaps > 0) {
+                    int backhaul_vap_index = convert_vap_name_to_index(wifi_prop, vap_names[0]);
+                    if (backhaul_vap_index >= 0) {
+                        backhaul_vap_info = get_wifidb_vap_parameters(backhaul_vap_index);
+                    }
                 }
-            }
 #endif /* UWM_CTRL_WPS_SUPPORT */
-            if (backhaul_vap_info != NULL &&
-                strlen((char *)backhaul_vap_info->u.bss_info.ssid) > 0 &&
+            if (backhaul_vap_info != NULL && strlen((char *)backhaul_vap_info->u.bss_info.ssid) > 0 &&
                 strlen((char *)backhaul_vap_info->u.bss_info.security.u.key.key) > 0 &&
                 strcmp((char *)backhaul_vap_info->u.bss_info.security.u.key.key, INVALID_KEY) != 0) {
                 memset(p_tgt_vap_map->vap_array[0].u.bss_info.multi_ap_backhaul_ssid, 0,
                        sizeof(p_tgt_vap_map->vap_array[0].u.bss_info.multi_ap_backhaul_ssid));
-                strncpy((char *)p_tgt_vap_map->vap_array[0].u.bss_info.multi_ap_backhaul_ssid,
-                       (char *)backhaul_vap_info->u.bss_info.ssid,
+                strncpy((char *)p_tgt_vap_map->vap_array[0].u.bss_info.multi_ap_backhaul_ssid, (char *)backhaul_vap_info->u.bss_info.ssid,
                        sizeof(p_tgt_vap_map->vap_array[0].u.bss_info.multi_ap_backhaul_ssid) - 1);
 
                 memset(p_tgt_vap_map->vap_array[0].u.bss_info.multi_ap_backhaul_network_key, 0,
@@ -283,12 +231,6 @@ int vap_svc_private_update(vap_svc_t *svc, unsigned int radio_index, wifi_vap_in
                                    __FUNCTION__, __LINE__, map->vap_array[i].vap_index);
                 free(p_tgt_vap_map);
                 return -1;
-#else
-                wifi_util_info_print(WIFI_CTRL, "%s:%d Copied mesh backhaul credentials to multi_ap_backhaul for private VAP %d\n",
-                                   __FUNCTION__, __LINE__, map->vap_array[i].vap_index);
-            } else {
-                wifi_util_dbg_print(WIFI_CTRL, "%s:%d Mesh backhaul credentials not found or invalid, WPS enabled without backhaul for VAP %d\n",
-                                   __FUNCTION__, __LINE__, map->vap_array[i].vap_index);
 #endif /* UWM_CTRL_WPS_SUPPORT */
             }
         }

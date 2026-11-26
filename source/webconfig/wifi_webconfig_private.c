@@ -115,22 +115,9 @@ webconfig_error_t encode_private_subdoc(webconfig_t *config, webconfig_subdoc_da
             vap = &map->vap_array[j];
             rdk_vap = &radio->vaps.rdk_vap_array[j];
 #ifdef UWM_CTRL_WPS_SUPPORT
-            /*
-             * Dedicated onboarding: also emit the dedicated EasyMesh onboarding
-             * VAPs (prefix "onboarding_", AP.5 / AP.6) into the
-             * "private" subdoc so a rdk-wps-monitor flip of
-             * Device.WiFi.AccessPoint.{5,6}.Enable +
-             * ApplyAccessPointSettings carries the cached
-             * onboarding SSID / WPA2-PSK / per-process random key
-             * payload to webconfig_hal_private_vap_apply ->
-             * vap_svc_private_update -> wifi_hal_createVAP. Without
-             * this branch encode_private_subdoc skips them, the
-             * decoded radio slot stays zero and the BSS comes up
-             * blank with no SSID/security.
-             */
+            // Also encode the onboarding VAPs in the private subdoc
             if ((is_vap_private(&params->hal_cap.wifi_prop, vap->vap_index) ||
-                    is_vap_onboarding(&params->hal_cap.wifi_prop, vap->vap_index)) &&
-                (strlen(vap->vap_name) != 0)) {
+                is_vap_onboarding(&params->hal_cap.wifi_prop, vap->vap_index)) && (strlen(vap->vap_name) != 0)) {
 #else
             if (is_vap_private(&params->hal_cap.wifi_prop, vap->vap_index) && (strlen(vap->vap_name) != 0)) {
 #endif /* UWM_CTRL_WPS_SUPPORT */
@@ -186,7 +173,7 @@ webconfig_error_t decode_private_subdoc(webconfig_t *config, webconfig_subdoc_da
     cJSON *obj, *obj_vap;
     unsigned int i, j, size, radio_index, vap_array_index;
     unsigned int presence_count = 0;
-    unsigned int num_private_ssid;
+    unsigned int num_private_ssid = 0;
     wifi_vap_name_t vap_names[MAX_NUM_RADIOS];
     char *name;
     char *str;
@@ -233,16 +220,7 @@ webconfig_error_t decode_private_subdoc(webconfig_t *config, webconfig_subdoc_da
 
     size = cJSON_GetArraySize(obj_vaps);
 #ifdef UWM_CTRL_WPS_SUPPORT
-    /*
-     * Dedicated onboarding: allow the optional onboarding VAPs (prefix
-     * "onboarding_", AP.5 / AP.6) to ride this subdoc on top of
-     * the per-radio private SSIDs. The original upper bound was
-     * MAX_NUM_RADIOS (one private SSID per radio); with up to 2
-     * onboarding VAPs added we generously cap at MAX_NUM_RADIOS *
-     * MAX_NUM_VAP_PER_RADIO. encode_private_subdoc continues to
-     * emit only is_vap_private + is_vap_onboarding entries, so
-     * the upper bound is purely a sanity guard.
-     */
+    // Allow the onboarding VAPs on top of the per-radio private SSIDs
     if (size < MIN_NUM_RADIOS || size > (MAX_NUM_RADIOS * MAX_NUM_VAP_PER_RADIO)) {
 #else
     if (size < MIN_NUM_RADIOS || size > MAX_NUM_RADIOS) {
@@ -254,12 +232,7 @@ webconfig_error_t decode_private_subdoc(webconfig_t *config, webconfig_subdoc_da
         return webconfig_error_invalid_subdoc;
     }
 
-    /*
-     * Count each expected private SSID at most once. The private subdoc may
-     * also carry dedicated onboarding VAPs; a nested strncmp loop would
-     * over-count when a short private name is a prefix of another entry and
-     * then fail presence_count != num_private_ssid, rejecting the apply.
-     */
+    //num_private_ssid has the total number of private SSIDs. It should be used to loop over instead of size.
     presence_count = 0;
     for (j = 0; j < num_private_ssid; j++) {
         for (i = 0; i < size; i++) {
@@ -314,24 +287,11 @@ webconfig_error_t decode_private_subdoc(webconfig_t *config, webconfig_subdoc_da
                 return webconfig_error_decode;
             }
 #ifdef UWM_CTRL_WPS_SUPPORT
-        } else if (!strncmp(name, "onboarding", strlen("onboarding"))) {
-            /*
-             * Dedicated onboarding: dedicated EasyMesh onboarding VAPs
-             * (AP.5/AP.6) decode through the same private-VAP shape as
-             * their encoder branch (encode_private_vap_object).
-             * Without this dispatch the decoded radio slot stays
-             * zeroed and webconfig_hal_private_vap_apply ->
-             * vap_svc_private_update -> wifi_hal_createVAP would
-             * push an empty bss_info to HAL, which the user
-             * observes as an onboarding BSS with no SSID/security
-             * after a WPS button press.
-             */
+        } else if (!strncmp(name, VAP_PREFIX_ONBOARDING, strlen(VAP_PREFIX_ONBOARDING))) {
+            // Decode onboarding VAPs through the private VAP object
             memset(vap_info, 0, sizeof(wifi_vap_info_t));
-            if (decode_private_vap_object(obj_vap, vap_info, rdk_vap_info,
-                    &params->hal_cap.wifi_prop) != webconfig_error_none) {
-                wifi_util_error_print(WIFI_WEBCONFIG,
-                    "%s:%d: VAP object validation failed (onboarding %s)\n",
-                    __func__, __LINE__, name);
+            if (decode_private_vap_object(obj_vap, vap_info, rdk_vap_info, &params->hal_cap.wifi_prop) != webconfig_error_none) {
+                wifi_util_error_print(WIFI_WEBCONFIG, "%s:%d: VAP object validation failed (onboarding %s)\n", __func__, __LINE__, name);
                 cJSON_Delete(json);
                 wifi_util_error_print(WIFI_WEBCONFIG, "%s\n", (char *)data->u.encoded.raw);
                 return webconfig_error_decode;

@@ -1472,23 +1472,15 @@ static int wps_event_callback(int apIndex, wifi_wps_ev_t event)
 }
 
 #ifdef UWM_EXT_WPS_SUPPORT
-/**
- * @brief WPS STA event callback - called when WPS credentials are received for station interface
- * @param vap_index VAP index where WPS occurred
- * @param event WPS result or WIFI_WPS_STA_REONBOARD_START
- * @return None
- */
-static void wps_sta_event_callback(unsigned int vap_index, unsigned int event)
+void wps_sta_event_callback(unsigned int vap_index, unsigned int event)
 {
     wifi_ctrl_t *ctrl = get_wifictrl_obj();
     vap_svc_t *ext_svc = NULL;
 
-    wifi_util_info_print(WIFI_CTRL, "%s:%d: WPS STA event callback: vap_index=%d, event=%d\n",
-        __func__, __LINE__, vap_index, event);
+    wifi_util_info_print(WIFI_CTRL, "%s:%d: WPS STA event callback: vap_index=%d, event=%d\n", __func__, __LINE__, vap_index, event);
 
     if (ctrl == NULL) {
-        wifi_util_error_print(WIFI_CTRL, "%s:%d: ctrl is NULL\n",
-            __func__, __LINE__);
+        wifi_util_error_print(WIFI_CTRL, "%s:%d: ctrl is NULL\n", __func__, __LINE__);
         return;
     }
 
@@ -1500,20 +1492,16 @@ static void wps_sta_event_callback(unsigned int vap_index, unsigned int event)
             return;
         }
 
-        /* WPS_EV_SUCCESS is value 2 in the HAL WPS event ABI. */
-        if (event != 2) {
+        if (event != WIFI_WPS_STA_ONBOARD_SUCCESS) {
             vap_svc_mesh_ext_wps_reonboard_aborted(ext_svc, vap_index);
             return;
         }
 
         /* Found the service - call the WPS credentials handler */
-        wifi_util_info_print(WIFI_CTRL, "%s:%d: Calling vap_svc_mesh_ext_wps_credentials_received "
-            "for vap_index %d\n", __func__, __LINE__, vap_index);
+        wifi_util_info_print(WIFI_CTRL, "%s:%d: ext_wps_credentials_received for vap_index %d\n", __func__, __LINE__, vap_index);
         vap_svc_mesh_ext_wps_credentials_received(ext_svc, vap_index);
     } else {
-        wifi_util_dbg_print(WIFI_CTRL, "%s:%d: Could not find mesh extender service for vap_index %d "
-            "(ext_svc=%p, type=%d)\n", __func__, __LINE__, vap_index, ext_svc,
-            ext_svc ? ext_svc->type : -1);
+        wifi_util_dbg_print(WIFI_CTRL, "%s:%d: No mesh extender service found for vap_index %d\n", __func__, __LINE__, vap_index);
     }
 }
 #endif
@@ -4157,21 +4145,7 @@ void get_subdoc_name_from_vap_index(uint8_t vap_index, int* subdoc)
         return;
 #ifdef UWM_CTRL_WPS_SUPPORT
     } else if (is_vap_onboarding(get_wifi_hal_cap_prop(), vap_index)) {
-        /*
-         * Dedicated onboarding: dedicated EasyMesh onboarding VAPs (vap_name prefix
-         * "onboarding_", AP.5 / AP.6) ride the PRIVATE subdoc so a
-         * rdk-wps-monitor write of Device.WiFi.AccessPoint.{5,6}.Enable
-         * + Device.WiFi.ApplyAccessPointSettings flushes through
-         * push_vap_dml_cache_to_one_wifidb -> push_subdoc_to_one_wifidb
-         * (PRIVATE arm) -> webconfig_hal_private_vap_apply ->
-         * vap_svc_private_update -> wifi_hal_createVAP with the
-         * cached SSID="onboarding" / WPA2-PSK / key="onboarding"
-         * payload. Without this routing the dispatch falls through
-         * to the default arm (MESH_STA), encode_mesh_sta_subdoc()
-         * doesn't iterate onboarding VAPs, and the WPS press is
-         * silently dropped on the apply side -- the BSS comes up
-         * blank with no SSID/security.
-         */
+        // Dedicated onboarding VAPs use the ONBOARDING subdoc
         *subdoc = ONBOARDING;
         return;
 #endif /* UWM_CTRL_WPS_SUPPORT */

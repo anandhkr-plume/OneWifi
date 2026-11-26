@@ -1900,7 +1900,7 @@ webconfig_error_t decode_vap_common_object(const cJSON *vap, wifi_vap_info_t *va
 
     // wpsConfigMethodsEnabled
     if (strstr(vap_info->vap_name, "private") != NULL ||
-        strstr(vap_info->vap_name, "onboarding") != NULL) {
+        strstr(vap_info->vap_name, VAP_PREFIX_ONBOARDING) != NULL) {
         decode_param_integer(vap, "WpsConfigMethodsEnabled", param);
         vap_info->u.bss_info.wps.methods = param->valuedouble;
         // WpsConfigPin
@@ -1908,12 +1908,8 @@ webconfig_error_t decode_vap_common_object(const cJSON *vap, wifi_vap_info_t *va
         snprintf(vap_info->u.bss_info.wps.pin, sizeof(vap_info->u.bss_info.wps.pin), "%s", param->valuestring);
     }
 #ifdef UWM_CTRL_WPS_SUPPORT
-    /*
-     * Older encodes omitted WpsConfigMethodsEnabled for onboarding VAPs, so
-     * methods landed as 0 and hostapd left wps_state disabled. Pin push-button
-     * when enabling onboarding WPS so deferred PBC can arm the registrar.
-     */
-    if (strstr(vap_info->vap_name, "onboarding") != NULL &&
+    // Older encodes omitted WpsConfigMethodsEnabled for onboarding VAPs, default to push-button
+    if (strstr(vap_info->vap_name, VAP_PREFIX_ONBOARDING) != NULL &&
         vap_info->u.bss_info.wps.enable &&
         vap_info->u.bss_info.wps.methods == 0) {
         vap_info->u.bss_info.wps.methods = WIFI_ONBOARDINGMETHODS_PUSHBUTTON;

@@ -202,9 +202,9 @@ extern int vap_svc_mesh_ext_update(vap_svc_t *svc, unsigned int radio_index,
 extern int vap_svc_mesh_ext_event(vap_svc_t *svc, wifi_event_type_t type, wifi_event_subtype_t sub_type, vap_svc_event_t event, void *arg);
 extern bool vap_svc_is_mesh_ext(unsigned int vap_index);
 #ifdef UWM_EXT_WPS_SUPPORT
-extern int vap_svc_mesh_ext_wps_credentials_received(vap_svc_t *svc, unsigned int vap_index);
 extern int vap_svc_mesh_ext_wps_reonboard_started(vap_svc_t *svc, unsigned int vap_index);
 extern int vap_svc_mesh_ext_wps_reonboard_aborted(vap_svc_t *svc, unsigned int vap_index);
+extern int vap_svc_mesh_ext_wps_credentials_received(vap_svc_t *svc, unsigned int vap_index);
 #endif
 
 vap_svc_t *get_svc_by_type(wifi_ctrl_t *ctrl, vap_svc_type_t type);

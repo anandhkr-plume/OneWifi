@@ -12739,16 +12739,8 @@ WPS_SetParamIntValue
             return FALSE;
         }
 #ifdef UWM_CTRL_WPS_SUPPORT
-        /*
-         * Dedicated onboarding VAPs are materialized in the DML cache before
-         * activation and pinned to WPA2/AES with push-button capability.
-         * They are not private VAPs, so bypass the legacy private-only check.
-         */
-        if (is_vap_onboarding(&((webconfig_dml_t *)get_webconfig_dml())->hal_cap.wifi_prop,
-                wlanIndex)) {
-            wifi_util_info_print(WIFI_DMCLI,
-                "%s:%d validating dedicated onboarding VAP %d\n",
-                __func__, __LINE__, wlanIndex);
+        if (is_vap_onboarding(&((webconfig_dml_t *)get_webconfig_dml())->hal_cap.wifi_prop, wlanIndex)) {
+            wifi_util_info_print(WIFI_DMCLI, "%s:%d validating dedicated onboarding VAP %d\n", __func__, __LINE__, wlanIndex);
             return TRUE;
         }
 #endif /* UWM_CTRL_WPS_SUPPORT */
@@ -12818,8 +12810,7 @@ WPS_SetParamIntValue
         wifi_vap_info_t *vapInfo = (wifi_vap_info_t *)get_dml_cache_vap_info(instance_number - 1);
 #ifdef UWM_CTRL_WPS_SUPPORT
         if ((vapInfo != NULL) && (vapInfo->u.bss_info.wpsPushButton == true) &&
-            !is_vap_onboarding(&((webconfig_dml_t *)get_webconfig_dml())->hal_cap.wifi_prop,
-                wlanIndex)) {
+            !is_vap_onboarding(&((webconfig_dml_t *)get_webconfig_dml())->hal_cap.wifi_prop, wlanIndex)) {
 #else
         if ((vapInfo != NULL) && (vapInfo->u.bss_info.wpsPushButton == true)) {
 #endif /* UWM_CTRL_WPS_SUPPORT */

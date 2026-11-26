@@ -197,6 +197,7 @@ typedef struct {
 
 #define VAP_PREFIX_PRIVATE          "private_ssid"
 #define VAP_PREFIX_IOT              "iot_ssid"
+#define VAP_PREFIX_ONBOARDING       "onboarding"
 #define VAP_PREFIX_MESH_STA         "mesh_sta"
 #define VAP_PREFIX_MESH_BACKHAUL    "mesh_backhaul"
 #define VAP_PREFIX_HOTSPOT          "hotspot"
@@ -205,6 +206,8 @@ typedef struct {
 #define VAP_PREFIX_LNF_PSK          "lnf_psk"
 #define VAP_PREFIX_LNF_RADIUS       "lnf_radius"
 #define VAP_PREFIX_LNF              "lnf"
+
+#define WPS_ONBOARDING_PASSKEY "onboarding_pk"
 
 #define VAP_INDEX(hal_cap, map_index) hal_cap.wifi_prop.interface_map[map_index].index
 #define RADIO_INDEX(hal_cap, map_index) hal_cap.wifi_prop.interface_map[map_index].rdk_radio_index
@@ -352,30 +355,7 @@ BOOL is_vap_hotspot_secure_6g(wifi_platform_property_t *wifi_prop, unsigned int 
 BOOL is_vap_lnf_radius(wifi_platform_property_t *wifi_prop, unsigned int ap_index);
 BOOL is_vap_mesh_sta(wifi_platform_property_t *wifi_prop, unsigned int ap_index);
 #ifdef UWM_CTRL_WPS_SUPPORT
-static inline BOOL is_vap_onboarding(wifi_platform_property_t *wifi_prop,
-    unsigned int ap_index)
-{
-    wifi_interface_name_idex_map_t *vap_prop;
-    unsigned int radio;
-    unsigned int interface;
-    unsigned int total_interfaces = 0;
-
-    for (radio = 0; radio < wifi_prop->numRadios; radio++) {
-        total_interfaces += wifi_prop->radiocap[radio].maxNumberVAPs;
-    }
-    for (interface = 0; interface < total_interfaces; interface++) {
-        vap_prop = &wifi_prop->interface_map[interface];
-        if (vap_prop->index == ap_index) {
-            return strncmp((char *)&vap_prop->vap_name[0], "onboarding_",
-                strlen("onboarding_")) == 0 ? TRUE : FALSE;
-        }
-    }
-
-    return FALSE;
-}
-
-/* Per-process random PSK for the dedicated onboarding BSS (not the mesh key). */
-void wifi_fill_onboarding_psk(char *key, size_t key_len);
+BOOL is_vap_onboarding(wifi_platform_property_t *wifi_prop, unsigned int ap_index);
 #endif /* UWM_CTRL_WPS_SUPPORT */
 
 int country_code_conversion(wifi_countrycode_type_t *country_code, char *country, int country_len,
@@ -444,15 +424,9 @@ int get_list_of_mesh_sta(wifi_platform_property_t *wifi_prop, int list_size,
 int get_list_of_iot_ssid(wifi_platform_property_t *wifi_prop, int list_size,
     wifi_vap_name_t vap_names[]);
 #ifdef UWM_CTRL_WPS_SUPPORT
-/* Dedicated onboarding: collect dedicated EasyMesh onboarding VAPs (prefix
- * "onboarding_") so the PRIVATE subdoc apply pipeline can also
- * reach them. */
-static inline int get_list_of_onboarding_ssid(wifi_platform_property_t *wifi_prop,
-    int list_size, wifi_vap_name_t vap_names[])
-{
-    return get_list_of_vap_names(wifi_prop, vap_names, list_size, 1, "onboarding");
-}
+int get_list_of_onboarding_ssid(wifi_platform_property_t *wifi_prop, int list_size, wifi_vap_name_t vap_names[]);
 #endif /* UWM_CTRL_WPS_SUPPORT */
+
 int get_radio_index_for_vap_index(wifi_platform_property_t *wifi_prop, int vap_index);
 int min_hw_mode_conversion(unsigned int vapIndex, char *inputStr, char *outputStr, char *tableType);
 int vif_radio_idx_conversion(unsigned int vapIndex, int *input, int *output, char *tableType);
